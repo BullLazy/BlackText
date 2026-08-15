@@ -26,7 +26,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-            - name: Install system dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
 
@@ -35,6 +35,8 @@ jobs:
             zip \
             unzip \
             autoconf \
+            automake \
+            autopoint \
             libtool \
             libltdl-dev \
             pkg-config \
@@ -45,8 +47,6 @@ jobs:
             cmake \
             libffi-dev \
             libssl-dev \
-            automake \
-            autopoint \
             gettext \
             build-essential \
             ccache \
@@ -135,12 +135,14 @@ jobs:
 
           AIDL="$ANDROID_SDK_ROOT/build-tools/$LATEST_BUILD_TOOLS/aidl"
 
-          test -x "$AIDL"
+          if [ ! -x "$AIDL" ]; then
+            echo "AIDL bulunamadi:"
+            echo "$AIDL"
+            exit 1
+          fi
 
           echo "AIDL bulundu:"
           echo "$AIDL"
-
-          "$AIDL" || true
 
       - name: Build APK
         env:
