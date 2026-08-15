@@ -11,6 +11,13 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/29.0.14206865
+      ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/29.0.14206865
+      BUILDOZER_WARN_ON_ROOT: "0"
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -50,7 +57,8 @@ jobs:
             gettext \
             build-essential \
             ccache \
-            curl
+            curl \
+            python3-virtualenv
 
       - name: Setup Rust
         run: |
@@ -75,9 +83,28 @@ jobs:
 
           buildozer --version
 
+      - name: Fix buildozer requirements
+        run: |
+          echo "=== BEFORE ==="
+          grep '^requirements' buildozer.spec || true
+
+          sed -i \
+            's/charset-normalizer==2\.1\.1/charset_normalizer==2.1.1/g' \
+            buildozer.spec
+
+          sed -i \
+            's/charset-normalizer/charset_normalizer/g' \
+            buildozer.spec
+
+          echo "=== AFTER ==="
+          grep '^requirements' buildozer.spec
+
+          if grep '^requirements' buildozer.spec | grep -q 'charset-normalizer'; then
+            echo "charset-normalizer duzeltilemedi"
+            exit 1
+          fi
+
       - name: Prepare Android SDK
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           echo "Android SDK:"
           echo "$ANDROID_SDK_ROOT"
@@ -85,7 +112,12 @@ jobs:
           SDKMANAGER="$(command -v sdkmanager || true)"
 
           if [ -z "$SDKMANAGER" ]; then
-            SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+            SDKMANAGER="$(
+              find "$ANDROID_SDK_ROOT/cmdline-tools" \
+                -type f \
+                -name sdkmanager \
+                | head -n 1
+            )"
           fi
 
           if [ -z "$SDKMANAGER" ]; then
@@ -97,13 +129,13 @@ jobs:
           echo "$SDKMANAGER"
 
           sudo mkdir -p "$ANDROID_SDK_ROOT/tools/bin"
-          sudo ln -sf "$SDKMANAGER" "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"
+          sudo ln -sf \
+            "$SDKMANAGER" \
+            "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"
 
           "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" --version
 
       - name: Check Android SDK
-        env:
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
         run: |
           echo "=== SDK ==="
           ls -la "$ANDROID_SDK_ROOT"
@@ -116,8 +148,8 @@ jobs:
           ls -la "$ANDROID_SDK_ROOT/platforms/android-36" | head
 
           echo "=== NDK 29 ==="
-          test -d "$ANDROID_SDK_ROOT/ndk/29.0.14206865"
-          ls -la "$ANDROID_SDK_ROOT/ndk/29.0.14206865" | head
+          test -d "$ANDROID_NDK_HOME"
+          ls -la "$ANDROID_NDK_HOME" | head
 
           echo "=== AIDL ==="
 
@@ -144,13 +176,26 @@ jobs:
           echo "AIDL bulundu:"
           echo "$AIDL"
 
+      - name: Verify build configuration
+        run: |
+          echo "=== BUILDOZER REQUIREMENTS ==="
+          grep '^requirements' buildozer.spec
+
+          echo "=== P4A BRANCH ==="
+          grep '^p4a.branch' buildozer.spec || true
+
+          echo "=== ANDROID API ==="
+          grep '^android.api' buildozer.spec || true
+
+          echo "=== ANDROID NDK ==="
+          grep '^android.ndk' buildozer.spec || true
+
+          echo "=== NDK PATH ==="
+          echo "$ANDROID_NDK_HOME"
+
+          test -d "$ANDROID_NDK_HOME"
+
       - name: Build APK
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
-          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/29.0.14206865
-          ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/29.0.14206865
-          BUILDOZER_WARN_ON_ROOT: "0"
         run: |
           buildozer -v android debug
 
@@ -161,9 +206,11 @@ jobs:
           ls -lah bin/ || true
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: BlackText-APK
-          path: bin/*.apk
+          path: |
+            bin/*.apk
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 14
