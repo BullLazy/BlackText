@@ -34,13 +34,11 @@ jobs:
             git \
             zip \
             unzip \
-            openjdk-17-jdk \
             autoconf \
             libtool \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
-            libncursesw5-dev \
             libtinfo6 \
             cmake \
             libffi-dev \
@@ -52,22 +50,102 @@ jobs:
             ccache \
             curl
 
-      - name: Install Rust
+      - name: Setup Rust
         run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+          fi
+
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+          rustc --version
+          cargo --version
 
       - name: Install Buildozer
         run: |
           python -m pip install --upgrade pip
+
           python -m pip install \
             git+https://github.com/kivy/buildozer \
             legacy-cgi \
             setuptools \
             cython==0.29.34
 
+          buildozer --version
+
+      - name: Prepare Android SDK
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          echo "Android SDK:"
+          echo "$ANDROID_SDK_ROOT"
+
+          SDKMANAGER="$(command -v sdkmanager || true)"
+
+          if [ -z "$SDKMANAGER" ]; then
+            SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager bulunamadi"
+            exit 1
+          fi
+
+          echo "sdkmanager:"
+          echo "$SDKMANAGER"
+
+          sudo mkdir -p "$ANDROID_SDK_ROOT/tools/bin"
+          sudo ln -sf "$SDKMANAGER" "$ANDROID_SDK_ROOT/tools/bin/sdkmanager"
+
+          "$ANDROID_SDK_ROOT/tools/bin/sdkmanager" --version
+
+      - name: Check Android SDK
+        env:
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+        run: |
+          echo "=== SDK ==="
+          ls -la "$ANDROID_SDK_ROOT"
+
+          echo "=== BUILD TOOLS ==="
+          ls -la "$ANDROID_SDK_ROOT/build-tools"
+
+          echo "=== PLATFORM 36 ==="
+          test -d "$ANDROID_SDK_ROOT/platforms/android-36"
+          ls -la "$ANDROID_SDK_ROOT/platforms/android-36" | head
+
+          echo "=== NDK 29 ==="
+          test -d "$ANDROID_SDK_ROOT/ndk/29.0.14206865"
+          ls -la "$ANDROID_SDK_ROOT/ndk/29.0.14206865" | head
+
+          echo "=== AIDL ==="
+
+          LATEST_BUILD_TOOLS="$(
+            find "$ANDROID_SDK_ROOT/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d \
+              -printf '%f\n' \
+              | sort -V \
+              | tail -n 1
+          )"
+
+          echo "Latest Build Tools: $LATEST_BUILD_TOOLS"
+
+          AIDL="$ANDROID_SDK_ROOT/build-tools/$LATEST_BUILD_TOOLS/aidl"
+
+          test -x "$AIDL"
+
+          echo "AIDL bulundu:"
+          echo "$AIDL"
+
+          "$AIDL" || true
+
       - name: Build APK
         env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/29.0.14206865
+          ANDROID_NDK_ROOT: /usr/local/lib/android/sdk/ndk/29.0.14206865
           BUILDOZER_WARN_ON_ROOT: "0"
         run: |
           buildozer -v android debug
