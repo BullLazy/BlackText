@@ -26,7 +26,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install system dependencies
+            - name: Install system dependencies
         run: |
           sudo apt-get update
 
@@ -36,9 +36,11 @@ jobs:
             unzip \
             autoconf \
             libtool \
+            libltdl-dev \
             pkg-config \
             zlib1g-dev \
             libncurses5-dev \
+            libncursesw5-dev \
             libtinfo6 \
             cmake \
             libffi-dev \
